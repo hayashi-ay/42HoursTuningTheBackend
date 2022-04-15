@@ -26,3 +26,10 @@ services:
         MYSQL_DATABASE: "app"
         MYSQL_USER: "backend"
         MYSQL_PASSWORD : "backend"
+    locust:
+        image: locustio/locust
+        ports:
+          - "8089:8089"
+        volumes:
+          - ./localLocust/:/mnt/locust
+        command: -f /mnt/locust/scenario.py -H http://localhost:8080
