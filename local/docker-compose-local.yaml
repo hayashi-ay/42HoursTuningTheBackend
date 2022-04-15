@@ -26,6 +26,8 @@ services:
         MYSQL_DATABASE: "app"
         MYSQL_USER: "backend"
         MYSQL_PASSWORD : "backend"
+      ports:
+          - "3306:3306"
     locust:
         image: locustio/locust
         ports:
