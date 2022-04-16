@@ -8,6 +8,8 @@ services:
           - target: 80
             published: 8080
             protocol: tcp
+      volumes:
+          - ./logs/nginx_access.log:/var/log/nginx/da_access.log
     backend:
       init: true
       build:
