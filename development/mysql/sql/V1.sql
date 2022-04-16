@@ -10,6 +10,9 @@ CREATE INDEX status_updated_at_index ON record(status, updated_at);
 -- select count(*) from record where status = "open" and (category_id, application_group) in ( (3, 461), (3, 462), (3, 463), (3, 464), (3, 465) );
 CREATE INDEX status_category_id_index ON record(status, category_id);
 
+-- select count(*) from record where created_by = 2291 and status = "open";
+CREATE INDEX created_by_index on record(created_by, status);
+
 CREATE INDEX value_index on session(value);
 CREATE INDEX user_id_index on group_member(user_id);
 CREATE INDEX linked_record_id_index on record_comment(linked_record_id);
