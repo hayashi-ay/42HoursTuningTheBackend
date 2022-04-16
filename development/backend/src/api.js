@@ -363,33 +363,10 @@ const tomeActive = async (req, res) => {
   res.send({ count: count, items: items });
 };
 
-// GET /record-views/allActive
-// 全件一覧
-const allActive = async (req, res) => {
-  let user = await getLinkedUser(req.headers);
-
-  if (!user) {
-    res.status(401).send();
-    return;
-  }
-
-  let offset = Number(req.query.offset);
-  let limit = Number(req.query.limit);
-
-  if (Number.isNaN(offset) || Number.isNaN(limit)) {
-    offset = 0;
-    limit = 10;
-  }
-
-  const searchRecordQs = `SELECT record_id FROM record WHERE status = "open" order by updated_at desc, record_id asc limit ? offset ?`;
+const commonRecordView = async (targetIds, user) => {
   const getRecordsQs = `SELECT * FROM record WHERE record_id in (?)`;
-
-  const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
-  let ids = recordIdResult.map(r => r.record_id);
-  const [recordResult] = await pool.query(getRecordsQs, [ids]);
-
+  const [recordResult] = await pool.query(getRecordsQs, [targetIds]);
   const items = Array(recordResult.length);
-  let count = 0;
 
   const searchUserQs = 'SELECT * FROM user WHERE user_id = ?';
   const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
@@ -470,13 +447,40 @@ const allActive = async (req, res) => {
     items[i] = resObj;
   }
 
-  const recordCountQs = 'SELECT count(*) FROM record WHERE status = "open"';
+  return items;
+}
 
+// GET /record-views/allActive
+// 全件一覧
+const allActive = async (req, res) => {
+  let user = await getLinkedUser(req.headers);
+
+  if (!user) {
+    res.status(401).send();
+    return;
+  }
+
+  let offset = Number(req.query.offset);
+  let limit = Number(req.query.limit);
+
+  if (Number.isNaN(offset) || Number.isNaN(limit)) {
+    offset = 0;
+    limit = 10;
+  }
+
+  const searchRecordQs = `SELECT record_id FROM record WHERE status = "open" order by updated_at desc, record_id asc limit ? offset ?`;
+
+  const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
+  let ids = recordIdResult.map(r => r.record_id);
+
+  const recordCountQs = 'SELECT count(*) FROM record WHERE status = "open"';
+  let count = 0;
   const [recordCountResult] = await pool.query(recordCountQs);
   if (recordCountResult.length === 1) {
     count = recordCountResult[0]['count(*)'];
   }
 
+  const items = await commonRecordView(ids, user);
   res.send({ count: count, items: items });
 };
 
