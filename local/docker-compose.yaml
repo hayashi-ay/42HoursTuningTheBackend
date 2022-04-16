@@ -30,6 +30,8 @@ services:
         MYSQL_PASSWORD : "backend"
       ports:
           - "3306:3306"
+      volumes:
+          - ./logs/mysql_slow.log:/var/log/slow.log
     locust:
         image: locustio/locust
         ports:
