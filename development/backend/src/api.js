@@ -506,7 +506,12 @@ const allClosed = async (req, res) => {
     limit = 10;
   }
 
-  const searchRecordQs = `select * from record where status = "closed" order by updated_at desc, record_id asc limit ? offset ?`;
+  const searchRecordQs = `select r.*, u.name as createdByName, gi.name as applicationGroupName from record r
+    left join user u
+    on r.created_by = u.user_id
+    left join group_info gi
+    on r.application_group = gi.group_id
+    where status = "closed" order by updated_at desc, record_id asc limit ? offset ?`;
 
   const [recordResult] = await pool.query(searchRecordQs, [limit, offset]);
   mylog(recordResult);
@@ -523,12 +528,12 @@ const allClosed = async (req, res) => {
 
   for (let i = 0; i < recordResult.length; i++) {
     const resObj = {
-      recordId: null,
-      title: '',
-      applicationGroup: null,
-      applicationGroupName: null,
+      recordId: recordResult[i].record_id,
+      title: recordResult[i].title,
+      applicationGroup: recordResult[i].application_group,
+      applicationGroupName: recordResult[i].applicationGroupName,
       createdBy: null,
-      createdByName: null,
+      createdByName: recordResult[i].createdByName,
       createAt: '',
       commentCount: 0,
       isUnConfirmed: true,
@@ -540,23 +545,10 @@ const allClosed = async (req, res) => {
     mylog(line);
     const recordId = recordResult[i].record_id;
     const createdBy = line.created_by;
-    const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
-    let createdByName = null;
-    let applicationGroupName = null;
     let thumbNailItemId = null;
     let commentCount = 0;
     let isUnConfirmed = true;
-
-    const [userResult] = await pool.query(searchUserQs, [createdBy]);
-    if (userResult.length === 1) {
-      createdByName = userResult[0].name;
-    }
-
-    const [groupResult] = await pool.query(searchGroupQs, [applicationGroup]);
-    if (groupResult.length === 1) {
-      applicationGroupName = groupResult[0].name;
-    }
 
     const [itemResult] = await pool.query(searchThumbQs, [recordId]);
     if (itemResult.length === 1) {
@@ -579,11 +571,7 @@ const allClosed = async (req, res) => {
     }
 
     resObj.recordId = recordId;
-    resObj.title = line.title;
-    resObj.applicationGroup = applicationGroup;
-    resObj.applicationGroupName = applicationGroupName;
     resObj.createdBy = createdBy;
-    resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
     resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
