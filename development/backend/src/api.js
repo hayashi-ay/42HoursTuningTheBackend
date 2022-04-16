@@ -506,11 +506,19 @@ const allClosed = async (req, res) => {
     limit = 10;
   }
 
-  const searchRecordQs = `select r.*, u.name as createdByName, gi.name as applicationGroupName from record r
+  const searchRecordQs = `select r.*,
+    u.name as createdByName,
+    gi.name as applicationGroupName,
+    rc.commentCount
+    from record r
     left join user u
     on r.created_by = u.user_id
     left join group_info gi
     on r.application_group = gi.group_id
+    left join (
+      select linked_record_id, count(*) as commentCount FROM record_comment group by linked_record_id
+    ) as rc
+    on r.record_id = rc.linked_record_id
     where status = "closed" order by updated_at desc, record_id asc limit ? offset ?`;
 
   const [recordResult] = await pool.query(searchRecordQs, [limit, offset]);
@@ -519,8 +527,6 @@ const allClosed = async (req, res) => {
   const items = Array(recordResult.length);
   let count = 0;
 
-  const searchUserQs = 'select * from user where user_id = ?';
-  const searchGroupQs = 'select * from group_info where group_id = ?';
   const searchThumbQs =
     'select * from record_item_file where linked_record_id = ? order by item_id asc limit 1';
   const countQs = 'select count(*) from record_comment where linked_record_id = ?';
@@ -535,7 +541,7 @@ const allClosed = async (req, res) => {
       createdBy: null,
       createdByName: recordResult[i].createdByName,
       createAt: '',
-      commentCount: 0,
+      commentCount: recordResult[i].commentCount,
       isUnConfirmed: true,
       thumbNailItemId: null,
       updatedAt: '',
@@ -547,17 +553,11 @@ const allClosed = async (req, res) => {
     const createdBy = line.created_by;
     const updatedAt = line.updated_at;
     let thumbNailItemId = null;
-    let commentCount = 0;
     let isUnConfirmed = true;
 
     const [itemResult] = await pool.query(searchThumbQs, [recordId]);
     if (itemResult.length === 1) {
       thumbNailItemId = itemResult[0].item_id;
-    }
-
-    const [countResult] = await pool.query(countQs, [recordId]);
-    if (countResult.length === 1) {
-      commentCount = countResult[0]['count(*)'];
     }
 
     const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
@@ -573,7 +573,6 @@ const allClosed = async (req, res) => {
     resObj.recordId = recordId;
     resObj.createdBy = createdBy;
     resObj.createAt = line.created_at;
-    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
     resObj.thumbNailItemId = thumbNailItemId;
     resObj.updatedAt = updatedAt;
