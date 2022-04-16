@@ -394,10 +394,12 @@ const allActive = async (req, res) => {
     limit = 10;
   }
 
-  const searchRecordQs = `select * from record where status = "open" order by updated_at desc, record_id asc limit ? offset ?`;
+  const searchRecordQs = `select record_id from record where status = "open" order by updated_at desc, record_id asc limit ? offset ?`;
+  const getRecordsQs = `select * from record where record_id in (?)`;
 
-  const [recordResult] = await pool.query(searchRecordQs, [limit, offset]);
-  mylog(recordResult);
+  const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
+  let ids = recordIdResult.map(r => r.record_id);
+  const [recordResult] = await pool.query(getRecordsQs, [ids]);
 
   const items = Array(recordResult.length);
   let count = 0;
