@@ -7,6 +7,9 @@ CREATE INDEX linked_record_id_index ON record_item_file(linked_record_id);
 -- select record_id from record where status = "closed" order by updated_at desc, record_id asc limit 10 offset 0;
 CREATE INDEX status_updated_at_index ON record(status, updated_at);
 
+-- select count(*) from record where status = "open" and (category_id, application_group) in ( (3, 461), (3, 462), (3, 463), (3, 464), (3, 465) );
+CREATE INDEX status_category_id_index ON record(status, category_id);
+
 CREATE INDEX value_index on session(value);
 CREATE INDEX user_id_index on group_member(user_id);
 CREATE INDEX linked_record_id_index on record_comment(linked_record_id);
