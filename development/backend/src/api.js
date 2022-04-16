@@ -237,28 +237,14 @@ const tomeActive = async (req, res) => {
     limit = 10;
   }
 
-  const searchMyGroupQs = `SELECT * FROM group_member WHERE user_id = ?`;
-  const [myGroupResult] = await pool.query(searchMyGroupQs, [user.user_id]);
-  mylog(myGroupResult);
+  const searchTargetQs = `SELECT c.category_id, c.application_group
+    FROM group_member g
+    LEFT JOIN category_group c
+    ON g.group_id = c.group_id
+    WHERE user_id = ?`;
 
-  const targetCategoryAppGroupList = [];
-  const searchTargetQs = `SELECT * FROM category_group WHERE group_id = ?`;
-
-  for (let i = 0; i < myGroupResult.length; i++) {
-    const groupId = myGroupResult[i].group_id;
-    mylog(groupId);
-
-    const [targetResult] = await pool.query(searchTargetQs, [groupId]);
-    for (let j = 0; j < targetResult.length; j++) {
-      const targetLine = targetResult[j];
-      mylog(targetLine);
-
-      targetCategoryAppGroupList.push({
-        categoryId: targetLine.category_id,
-        applicationGroup: targetLine.application_group,
-      });
-    }
-  }
+  const [targetResult] = await pool.query(searchTargetQs, [user.user_id]);
+  const targetCategoryAppGroupList = targetResult.map(r => ({categoryId: r.category_id, applicationGroup: r.application_group}));
 
   let searchRecordQs =
     'SELECT * FROM record WHERE status = "open" and (category_id, application_group) in (';
