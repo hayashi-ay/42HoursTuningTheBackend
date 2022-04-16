@@ -36,4 +36,4 @@ services:
           - "8089:8089"
         volumes:
           - ./localLocust/:/mnt/locust
-        command: -f /mnt/locust/scenario.py -H http://nginx:80
+        command: --config /mnt/locust/locust.conf.org

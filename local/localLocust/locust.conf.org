@@ -1,8 +1,6 @@
-locustfile = scenario.py
+locustfile = /mnt/locust/scenario.py
 headless = true
-host = https://__id__.ftt2204.dabaas.net
+host = http://nginx:80
 users = 390
-# spawn-rate: 1秒あたりに増加する秒間ユーザ数
 spawn-rate = 20
 run-time = 10s
-csv = result/r
