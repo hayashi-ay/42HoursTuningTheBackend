@@ -5,7 +5,7 @@ CREATE UNIQUE INDEX linked_record_id_created_at_index ON record_comment(linked_r
 CREATE INDEX linked_record_id_index ON record_item_file(linked_record_id);
 
 -- select record_id from record where status = "closed" order by updated_at desc, record_id asc limit 10 offset 0;
-CREATE UNIQUE INDEX status_updated_at_index ON record(status, updated_at);
+CREATE INDEX status_updated_at_index ON record(status, updated_at);
 
 CREATE INDEX value_index on session(value);
 CREATE INDEX user_id_index on group_member(user_id);
