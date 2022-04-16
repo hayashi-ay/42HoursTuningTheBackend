@@ -13,12 +13,14 @@ CREATE INDEX status_category_id_index ON record(status, category_id);
 -- select count(*) from record where created_by = 2291 and status = "open";
 CREATE INDEX created_by_index on record(created_by, status);
 
+-- update record set status = 'closed' where record_id = '65220';
+-- VARCHAR record_id
+CREATE INDEX rid_index on record(record_id);
+
 CREATE INDEX value_index on session(value);
 CREATE INDEX user_id_index on group_member(user_id);
 CREATE INDEX linked_record_id_index on record_comment(linked_record_id);
 CREATE INDEX user_id_index on user(user_id);
-CREATE INDEX group_id_index on group_info(group_id);
-CREATE INDEX gid_index on group_info(group_id);
 CREATE INDEX category_id_index on category(categoty_id);
 CREATE INDEX group_index on category_group(group_id);
 CREATE UNIQUE INDEX updated_at_record_id_index ON record(updated_at, record_id);
