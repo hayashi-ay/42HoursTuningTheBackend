@@ -498,7 +498,7 @@ const allClosed = async (req, res) => {
     limit = 10;
   }
 
-  const searchRecordQs = `SELECT record_id FROM record WHERE status = "closed" order by updated_at desc, record_id asc limit ? offset ?`;
+  const searchRecordQs = `select * from (SELECT record_id, updated_at FROM record WHERE status = "closed" order by updated_at desc limit ? offset ?) as c order by updated_at desc, record_id asc`;
   const getRecordsQs = `SELECT * FROM record WHERE record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
