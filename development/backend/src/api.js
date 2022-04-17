@@ -383,13 +383,13 @@ const allActive = async (req, res) => {
     limit = 10;
   }
 
+  const countQs = 'select count(*) from record_comment where linked_record_id = ?';
   const searchRecordQs = `SELECT record_id FROM record WHERE status = "open" order by updated_at desc, record_id asc limit ? offset ?`;
   const getRecordsQs = `SELECT r.*,
     u.name as createdByName,
     gi.name as applicationGroupName,
     rf.item_id as thumbNailItemId,
-    la.access_time as access_time,
-    rc.commentCount as commentCount
+    la.access_time as access_time
     FROM record r
     LEFT JOIN user u
     ON r.created_by = u.user_id
@@ -401,10 +401,6 @@ const allActive = async (req, res) => {
     ON r.record_id = rf.linked_record_id
     LEFT JOIN record_last_access la
     ON r.record_id = la.record_id AND r.created_by = la.user_id
-    LEFT JOIN (
-      SELECT linked_record_id, count(*) as commentCount FROM record_comment GROUP by linked_record_id
-    ) AS rc
-    ON r.record_id = rc.linked_record_id
     WHERE r.record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
@@ -423,7 +419,7 @@ const allActive = async (req, res) => {
       createdBy: null,
       createdByName: recordResult[i].createdByName,
       createAt: '',
-      commentCount: recordResult[i].commentCount,
+      commentCount: 0,
       isUnConfirmed: true,
       thumbNailItemId: recordResult[i].thumbNailItemId,
       updatedAt: '',
@@ -436,6 +432,11 @@ const allActive = async (req, res) => {
     const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
     let isUnConfirmed = true;
+
+    const [countResult] = await pool.query(countQs, [recordId]);
+    if (countResult.length === 1) {
+      commentCount = countResult[0]['count(*)'];
+    }
 
     if (recordResult[i].access_time) {
       mylog(updatedAt);
@@ -451,6 +452,7 @@ const allActive = async (req, res) => {
     resObj.applicationGroup = applicationGroup;
     resObj.createdBy = createdBy;
     resObj.createAt = line.created_at;
+    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
     resObj.updatedAt = updatedAt;
 
