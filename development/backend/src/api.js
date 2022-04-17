@@ -5,6 +5,8 @@ const jimp = require('jimp');
 
 const mysql = require('mysql2/promise');
 
+const { performance } = require('perf_hooks');
+
 
 // MEMO: 設定項目はここを参考にした
 // https://github.com/sidorares/node-mysql2#api-and-configuration
@@ -483,6 +485,8 @@ const allActive = async (req, res) => {
 // GET /record-views/allClosed
 // クローズ一覧
 const allClosed = async (req, res) => {
+  var t0 = performance.now();
+  console.log( 'Do allClosed' );
   let user = await getLinkedUser(req.headers);
 
   if (!user) {
@@ -499,7 +503,12 @@ const allClosed = async (req, res) => {
   }
 
   const searchRecordQs = `select * from (SELECT record_id, updated_at FROM record WHERE status = "closed" order by updated_at desc limit ? offset ?) as c order by updated_at desc, record_id asc`;
-  const getRecordsQs = `SELECT * FROM record WHERE record_id in (?)`;
+  const getRecordsQs = `SELECT r.*,
+    u.name as createdByName
+    FROM record r
+    LEFT JOIN user u
+    ON r.created_by = u.user_id
+    WHERE r.record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
   let ids = recordIdResult.map(r => r.record_id);
@@ -508,7 +517,6 @@ const allClosed = async (req, res) => {
   const items = Array(recordResult.length);
   let count = 0;
 
-  const searchUserQs = 'SELECT * FROM user WHERE user_id = ?';
   const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
   const searchThumbQs =
     'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
@@ -522,7 +530,7 @@ const allClosed = async (req, res) => {
       applicationGroup: null,
       applicationGroupName: null,
       createdBy: null,
-      createdByName: null,
+      createdByName: recordResult[i].createdByName,
       createAt: '',
       commentCount: 0,
       isUnConfirmed: true,
@@ -536,16 +544,10 @@ const allClosed = async (req, res) => {
     const createdBy = line.created_by;
     const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
-    let createdByName = null;
     let applicationGroupName = null;
     let thumbNailItemId = null;
     let commentCount = 0;
     let isUnConfirmed = true;
-
-    const [userResult] = await pool.query(searchUserQs, [createdBy]);
-    if (userResult.length === 1) {
-      createdByName = userResult[0].name;
-    }
 
     const [groupResult] = await pool.query(searchGroupQs, [applicationGroup]);
     if (groupResult.length === 1) {
@@ -577,7 +579,6 @@ const allClosed = async (req, res) => {
     resObj.applicationGroup = applicationGroup;
     resObj.applicationGroupName = applicationGroupName;
     resObj.createdBy = createdBy;
-    resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
     resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
@@ -595,6 +596,8 @@ const allClosed = async (req, res) => {
   }
 
   res.send({ count: count, items: items });
+  var t1 = performance.now();
+  console.log("Call to allClosed took " + (t1 - t0) + " milliseconds.");
 };
 
 // GET /record-views/mineActive
