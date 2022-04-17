@@ -5,6 +5,8 @@ const jimp = require('jimp');
 
 const mysql = require('mysql2/promise');
 
+const { performance } = require('perf_hooks');
+
 
 // MEMO: 設定項目はここを参考にした
 // https://github.com/sidorares/node-mysql2#api-and-configuration
@@ -280,7 +282,6 @@ const tomeActive = async (req, res) => {
   const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
   const searchThumbQs =
     'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
-  const countQs = 'SELECT count(*) FROM record_comment WHERE linked_record_id = ?';
   const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
 
   for (let i = 0; i < recordResult.length; i++) {
@@ -292,7 +293,7 @@ const tomeActive = async (req, res) => {
       createdBy: null,
       createdByName: null,
       createAt: '',
-      commentCount: 0,
+      commentCount: recordResult[i].comment_count,
       isUnConfirmed: true,
       thumbNailItemId: null,
       updatedAt: '',
@@ -307,7 +308,6 @@ const tomeActive = async (req, res) => {
     let createdByName = null;
     let applicationGroupName = null;
     let thumbNailItemId = null;
-    let commentCount = 0;
     let isUnConfirmed = true;
 
     const [userResult] = await pool.query(searchUserQs, [createdBy]);
@@ -323,11 +323,6 @@ const tomeActive = async (req, res) => {
     const [itemResult] = await pool.query(searchThumbQs, [recordId]);
     if (itemResult.length === 1) {
       thumbNailItemId = itemResult[0].item_id;
-    }
-
-    const [countResult] = await pool.query(countQs, [recordId]);
-    if (countResult.length === 1) {
-      commentCount = countResult[0]['count(*)'];
     }
 
     const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
@@ -347,7 +342,6 @@ const tomeActive = async (req, res) => {
     resObj.createdBy = createdBy;
     resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
-    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
     resObj.thumbNailItemId = thumbNailItemId;
     resObj.updatedAt = updatedAt;
@@ -382,34 +376,43 @@ const allActive = async (req, res) => {
   }
 
   const searchRecordQs = `SELECT record_id FROM record WHERE status = "open" order by updated_at desc, record_id asc limit ? offset ?`;
-  const getRecordsQs = `SELECT * FROM record WHERE record_id in (?)`;
+  const getRecordsQs = `SELECT r.*,
+    u.name as createdByName,
+    gi.name as applicationGroupName,
+    rf.item_id as thumbNailItemId,
+    la.access_time as access_time
+    FROM record r
+    LEFT JOIN user u
+    ON r.created_by = u.user_id
+    LEFT JOIN group_info gi
+    ON r.application_group = gi.group_id
+    LEFT JOIN (
+      SELECT linked_record_id, item_id FROM record_item_file WHERE linked_record_id in (?) order by item_id asc limit 1
+    ) AS rf
+    ON r.record_id = rf.linked_record_id
+    LEFT JOIN record_last_access la
+    ON r.record_id = la.record_id AND r.created_by = la.user_id
+    WHERE r.record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
   let ids = recordIdResult.map(r => r.record_id);
-  const [recordResult] = await pool.query(getRecordsQs, [ids]);
+  const [recordResult] = await pool.query(getRecordsQs, [ids, ids]);
 
   const items = Array(recordResult.length);
   let count = 0;
-
-  const searchUserQs = 'SELECT * FROM user WHERE user_id = ?';
-  const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
-  const searchThumbQs =
-    'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
-  const countQs = 'SELECT count(*) FROM record_comment WHERE linked_record_id = ?';
-  const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
 
   for (let i = 0; i < recordResult.length; i++) {
     const resObj = {
       recordId: null,
       title: '',
       applicationGroup: null,
-      applicationGroupName: null,
+      applicationGroupName: recordResult[i].applicationGroupName,
       createdBy: null,
-      createdByName: null,
+      createdByName: recordResult[i].createdByName,
       createAt: '',
-      commentCount: 0,
+      commentCount: recordResult[i].comment_count,
       isUnConfirmed: true,
-      thumbNailItemId: null,
+      thumbNailItemId: recordResult[i].thumbNailItemId,
       updatedAt: '',
     };
 
@@ -419,37 +422,12 @@ const allActive = async (req, res) => {
     const createdBy = line.created_by;
     const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
-    let createdByName = null;
-    let applicationGroupName = null;
-    let thumbNailItemId = null;
-    let commentCount = 0;
     let isUnConfirmed = true;
 
-    const [userResult] = await pool.query(searchUserQs, [createdBy]);
-    if (userResult.length === 1) {
-      createdByName = userResult[0].name;
-    }
-
-    const [groupResult] = await pool.query(searchGroupQs, [applicationGroup]);
-    if (groupResult.length === 1) {
-      applicationGroupName = groupResult[0].name;
-    }
-
-    const [itemResult] = await pool.query(searchThumbQs, [recordId]);
-    if (itemResult.length === 1) {
-      thumbNailItemId = itemResult[0].item_id;
-    }
-
-    const [countResult] = await pool.query(countQs, [recordId]);
-    if (countResult.length === 1) {
-      commentCount = countResult[0]['count(*)'];
-    }
-
-    const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
-    if (lastResult.length === 1) {
+    if (recordResult[i].access_time) {
       mylog(updatedAt);
       const updatedAtNum = Date.parse(updatedAt);
-      const accessTimeNum = Date.parse(lastResult[0].access_time);
+      const accessTimeNum = Date.parse(recordResult[i].access_time);
       if (updatedAtNum <= accessTimeNum) {
         isUnConfirmed = false;
       }
@@ -458,13 +436,9 @@ const allActive = async (req, res) => {
     resObj.recordId = recordId;
     resObj.title = line.title;
     resObj.applicationGroup = applicationGroup;
-    resObj.applicationGroupName = applicationGroupName;
     resObj.createdBy = createdBy;
-    resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
-    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
-    resObj.thumbNailItemId = thumbNailItemId;
     resObj.updatedAt = updatedAt;
 
     items[i] = resObj;
@@ -483,6 +457,8 @@ const allActive = async (req, res) => {
 // GET /record-views/allClosed
 // クローズ一覧
 const allClosed = async (req, res) => {
+  var t0 = performance.now();
+  console.log( 'Do allClosed' );
   let user = await getLinkedUser(req.headers);
 
   if (!user) {
@@ -498,35 +474,47 @@ const allClosed = async (req, res) => {
     limit = 10;
   }
 
-  const searchRecordQs = `select * from (SELECT record_id, updated_at FROM record WHERE status = "closed" order by updated_at desc limit ? offset ?) as c order by updated_at desc, record_id asc`;
-  const getRecordsQs = `SELECT * FROM record WHERE record_id in (?)`;
+  const searchRecordQs = `SELECT record_id from (SELECT record_id, updated_at FROM record WHERE status = "closed" order by updated_at desc limit ? offset ?) as c order by updated_at desc, record_id asc`;
+  const getRecordsQs = `SELECT r.*,
+    u.name as createdByName,
+    gi.name as applicationGroupName,
+    rf.item_id as thumbNailItemId,
+    la.access_time as access_time
+    FROM record r
+    LEFT JOIN user u
+    ON r.created_by = u.user_id
+    LEFT JOIN group_info gi
+    ON r.application_group = gi.group_id
+    LEFT JOIN (
+      SELECT linked_record_id, item_id FROM record_item_file WHERE linked_record_id in (?) order by item_id asc limit 1
+    ) AS rf
+    ON r.record_id = rf.linked_record_id
+    LEFT JOIN record_last_access la
+    ON r.record_id = la.record_id AND r.created_by = la.user_id
+    WHERE r.record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
   let ids = recordIdResult.map(r => r.record_id);
-  const [recordResult] = await pool.query(getRecordsQs, [ids]);
+  const [recordResult] = await pool.query(getRecordsQs, [ids, ids]);
+
+  var t2 = performance.now();
+  console.log("Call to allClosed middle took " + (t2 - t0) + " milliseconds.");
 
   const items = Array(recordResult.length);
   let count = 0;
-
-  const searchUserQs = 'SELECT * FROM user WHERE user_id = ?';
-  const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
-  const searchThumbQs =
-    'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
-  const countQs = 'SELECT count(*) FROM record_comment WHERE linked_record_id = ?';
-  const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
 
   for (let i = 0; i < recordResult.length; i++) {
     const resObj = {
       recordId: null,
       title: '',
       applicationGroup: null,
-      applicationGroupName: null,
+      applicationGroupName: recordResult[i].applicationGroupName,
       createdBy: null,
-      createdByName: null,
+      createdByName: recordResult[i].createdByName,
       createAt: '',
-      commentCount: 0,
+      commentCount: recordResult[i].comment_count,
       isUnConfirmed: true,
-      thumbNailItemId: null,
+      thumbNailItemId: recordResult[i].thumbNailItemId,
       updatedAt: '',
     };
 
@@ -536,37 +524,12 @@ const allClosed = async (req, res) => {
     const createdBy = line.created_by;
     const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
-    let createdByName = null;
-    let applicationGroupName = null;
-    let thumbNailItemId = null;
-    let commentCount = 0;
     let isUnConfirmed = true;
 
-    const [userResult] = await pool.query(searchUserQs, [createdBy]);
-    if (userResult.length === 1) {
-      createdByName = userResult[0].name;
-    }
-
-    const [groupResult] = await pool.query(searchGroupQs, [applicationGroup]);
-    if (groupResult.length === 1) {
-      applicationGroupName = groupResult[0].name;
-    }
-
-    const [itemResult] = await pool.query(searchThumbQs, [recordId]);
-    if (itemResult.length === 1) {
-      thumbNailItemId = itemResult[0].item_id;
-    }
-
-    const [countResult] = await pool.query(countQs, [recordId]);
-    if (countResult.length === 1) {
-      commentCount = countResult[0]['count(*)'];
-    }
-
-    const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
-    if (lastResult.length === 1) {
+    if (recordResult[i].access_time) {
       mylog(updatedAt);
       const updatedAtNum = Date.parse(updatedAt);
-      const accessTimeNum = Date.parse(lastResult[0].access_time);
+      const accessTimeNum = Date.parse(recordResult[i].access_time);
       if (updatedAtNum <= accessTimeNum) {
         isUnConfirmed = false;
       }
@@ -575,13 +538,9 @@ const allClosed = async (req, res) => {
     resObj.recordId = recordId;
     resObj.title = line.title;
     resObj.applicationGroup = applicationGroup;
-    resObj.applicationGroupName = applicationGroupName;
     resObj.createdBy = createdBy;
-    resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
-    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
-    resObj.thumbNailItemId = thumbNailItemId;
     resObj.updatedAt = updatedAt;
 
     items[i] = resObj;
@@ -595,6 +554,8 @@ const allClosed = async (req, res) => {
   }
 
   res.send({ count: count, items: items });
+  var t1 = performance.now();
+  console.log("Call to allClosed took " + (t1 - t0) + " milliseconds.");
 };
 
 // GET /record-views/mineActive
@@ -627,7 +588,6 @@ const mineActive = async (req, res) => {
   const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
   const searchThumbQs =
     'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
-  const countQs = 'SELECT count(*) FROM record_comment WHERE linked_record_id = ?';
   const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
 
   for (let i = 0; i < recordResult.length; i++) {
@@ -639,7 +599,7 @@ const mineActive = async (req, res) => {
       createdBy: null,
       createdByName: null,
       createAt: '',
-      commentCount: 0,
+      commentCount: recordResult[i].comment_count,
       isUnConfirmed: true,
       thumbNailItemId: null,
       updatedAt: '',
@@ -654,7 +614,6 @@ const mineActive = async (req, res) => {
     let createdByName = null;
     let applicationGroupName = null;
     let thumbNailItemId = null;
-    let commentCount = 0;
     let isUnConfirmed = true;
 
     const [userResult] = await pool.query(searchUserQs, [createdBy]);
@@ -670,11 +629,6 @@ const mineActive = async (req, res) => {
     const [itemResult] = await pool.query(searchThumbQs, [recordId]);
     if (itemResult.length === 1) {
       thumbNailItemId = itemResult[0].item_id;
-    }
-
-    const [countResult] = await pool.query(countQs, [recordId]);
-    if (countResult.length === 1) {
-      commentCount = countResult[0]['count(*)'];
     }
 
     const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
@@ -694,7 +648,6 @@ const mineActive = async (req, res) => {
     resObj.createdBy = createdBy;
     resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
-    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
     resObj.thumbNailItemId = thumbNailItemId;
     resObj.updatedAt = updatedAt;
@@ -819,7 +772,7 @@ const postComments = async (req, res) => {
 
   await pool.query(
     `
-    update record set updated_at = now() WHERE record_id = ?;`,
+    update record set comment_count = comment_count + 1, updated_at = now() WHERE record_id = ?;`,
     [`${recordId}`],
   );
 

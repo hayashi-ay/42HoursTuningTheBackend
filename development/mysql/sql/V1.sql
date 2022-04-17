@@ -21,7 +21,11 @@ CREATE INDEX value_index on session(value);
 CREATE INDEX user_id_index on group_member(user_id);
 CREATE INDEX linked_record_id_index on record_comment(linked_record_id);
 CREATE INDEX user_id_index on user(user_id);
-CREATE INDEX category_id_index on category(categoty_id);
+CREATE INDEX category_id_index on category(category_id);
 CREATE INDEX group_index on category_group(group_id);
 CREATE UNIQUE INDEX updated_at_record_id_index ON record(updated_at, record_id);
 CREATE UNIQUE INDEX linked_record_and_item_index ON record_item_file(linked_record_id, item_id);
+
+-- マイグレーション
+ALTER TABLE record ADD comment_count integer DEFAULT 0  NOT NULL;
+UPDATE record r SET comment_count = (SELECT COUNT(*) FROM record_comment c WHERE r.record_id = c.linked_record_id);
