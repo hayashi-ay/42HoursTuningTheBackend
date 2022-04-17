@@ -507,7 +507,8 @@ const allClosed = async (req, res) => {
     u.name as createdByName,
     gi.name as applicationGroupName,
     rf.item_id as thumbNailItemId,
-    la.access_time as access_time
+    la.access_time as access_time,
+    rc.commentCount as commentCount
     FROM record r
     LEFT JOIN user u
     ON r.created_by = u.user_id
@@ -519,6 +520,10 @@ const allClosed = async (req, res) => {
     ON r.record_id = rf.linked_record_id
     LEFT JOIN record_last_access la
     ON r.record_id = la.record_id AND r.created_by = la.user_id
+    LEFT JOIN (
+      SELECT linked_record_id, count(*) as commentCount FROM record_comment GROUP by linked_record_id
+    ) AS rc
+    ON r.record_id = rc.linked_record_id
     WHERE r.record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
@@ -532,7 +537,6 @@ const allClosed = async (req, res) => {
   let count = 0;
 
   const countQs = 'SELECT count(*) FROM record_comment WHERE linked_record_id = ?';
-  const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
 
   for (let i = 0; i < recordResult.length; i++) {
     const resObj = {
@@ -543,7 +547,7 @@ const allClosed = async (req, res) => {
       createdBy: null,
       createdByName: recordResult[i].createdByName,
       createAt: '',
-      commentCount: 0,
+      commentCount: recordResult[i].commentCount,
       isUnConfirmed: true,
       thumbNailItemId: recordResult[i].thumbNailItemId,
       updatedAt: '',
@@ -555,13 +559,7 @@ const allClosed = async (req, res) => {
     const createdBy = line.created_by;
     const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
-    let commentCount = 0;
     let isUnConfirmed = true;
-
-    const [countResult] = await pool.query(countQs, [recordId]);
-    if (countResult.length === 1) {
-      commentCount = countResult[0]['count(*)'];
-    }
 
     if (recordResult[i].access_time) {
       mylog(updatedAt);
@@ -577,7 +575,6 @@ const allClosed = async (req, res) => {
     resObj.applicationGroup = applicationGroup;
     resObj.createdBy = createdBy;
     resObj.createAt = line.created_at;
-    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
     resObj.updatedAt = updatedAt;
 
