@@ -576,28 +576,36 @@ const mineActive = async (req, res) => {
     limit = 10;
   }
 
-  const searchRecordQs = `SELECT * FROM record WHERE created_by = ? and status = "open" order by updated_at desc, record_id asc limit ? offset ?`;
+  const searchRecordQs = `SELECT r.*,
+    u.name as createdByName,
+    gi.name as applicationGroupName,
+    la.access_time as access_time
+    FROM record r
+    LEFT JOIN user u
+    ON r.created_by = u.user_id
+    LEFT JOIN group_info gi
+    ON r.application_group = gi.group_id
+    LEFT JOIN record_last_access la
+    ON r.record_id = la.record_id AND r.created_by = la.user_id
+    WHERE r.created_by = ? and r.status = "open"
+    order by r.updated_at desc, r.record_id asc limit ? offset ?`;
 
+  const searchThumbQs =
+    'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
   const [recordResult] = await pool.query(searchRecordQs, [user.user_id, limit, offset]);
   mylog(recordResult);
 
   const items = Array(recordResult.length);
   let count = 0;
 
-  const searchUserQs = 'SELECT * FROM user WHERE user_id = ?';
-  const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
-  const searchThumbQs =
-    'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
-  const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
-
   for (let i = 0; i < recordResult.length; i++) {
     const resObj = {
       recordId: null,
       title: '',
       applicationGroup: null,
-      applicationGroupName: null,
+      applicationGroupName: recordResult[i].applicationGroupName,
       createdBy: null,
-      createdByName: null,
+      createdByName: recordResult[i].createdByName,
       createAt: '',
       commentCount: recordResult[i].comment_count,
       isUnConfirmed: true,
@@ -611,31 +619,18 @@ const mineActive = async (req, res) => {
     const createdBy = line.created_by;
     const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
-    let createdByName = null;
-    let applicationGroupName = null;
     let thumbNailItemId = null;
     let isUnConfirmed = true;
-
-    const [userResult] = await pool.query(searchUserQs, [createdBy]);
-    if (userResult.length === 1) {
-      createdByName = userResult[0].name;
-    }
-
-    const [groupResult] = await pool.query(searchGroupQs, [applicationGroup]);
-    if (groupResult.length === 1) {
-      applicationGroupName = groupResult[0].name;
-    }
 
     const [itemResult] = await pool.query(searchThumbQs, [recordId]);
     if (itemResult.length === 1) {
       thumbNailItemId = itemResult[0].item_id;
     }
 
-    const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
-    if (lastResult.length === 1) {
+    if (recordResult[i].access_time) {
       mylog(updatedAt);
       const updatedAtNum = Date.parse(updatedAt);
-      const accessTimeNum = Date.parse(lastResult[0].access_time);
+      const accessTimeNum = Date.parse(recordResult[i].access_time);
       if (updatedAtNum <= accessTimeNum) {
         isUnConfirmed = false;
       }
@@ -644,9 +639,7 @@ const mineActive = async (req, res) => {
     resObj.recordId = recordId;
     resObj.title = line.title;
     resObj.applicationGroup = applicationGroup;
-    resObj.applicationGroupName = applicationGroupName;
     resObj.createdBy = createdBy;
-    resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
     resObj.isUnConfirmed = isUnConfirmed;
     resObj.thumbNailItemId = thumbNailItemId;
