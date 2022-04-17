@@ -502,24 +502,32 @@ const allClosed = async (req, res) => {
     limit = 10;
   }
 
-  const searchRecordQs = `select * from (SELECT record_id, updated_at FROM record WHERE status = "closed" order by updated_at desc limit ? offset ?) as c order by updated_at desc, record_id asc`;
+  const searchRecordQs = `SELECT record_id from (SELECT record_id, updated_at FROM record WHERE status = "closed" order by updated_at desc limit ? offset ?) as c order by updated_at desc, record_id asc`;
   const getRecordsQs = `SELECT r.*,
-    u.name as createdByName
+    u.name as createdByName,
+    gi.name as applicationGroupName,
+    rf.item_id as thumbNailItemId
     FROM record r
     LEFT JOIN user u
     ON r.created_by = u.user_id
+    LEFT JOIN group_info gi
+    ON r.application_group = gi.group_id
+    LEFT JOIN (
+      SELECT linked_record_id, item_id FROM record_item_file WHERE linked_record_id in (?) order by item_id asc limit 1
+    ) AS rf
+    ON r.record_id = rf.linked_record_id
     WHERE r.record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
   let ids = recordIdResult.map(r => r.record_id);
-  const [recordResult] = await pool.query(getRecordsQs, [ids]);
+  const [recordResult] = await pool.query(getRecordsQs, [ids, ids]);
+
+  var t2 = performance.now();
+  console.log("Call to allClosed middle took " + (t2 - t0) + " milliseconds.");
 
   const items = Array(recordResult.length);
   let count = 0;
 
-  const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
-  const searchThumbQs =
-    'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
   const countQs = 'SELECT count(*) FROM record_comment WHERE linked_record_id = ?';
   const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
 
@@ -528,13 +536,13 @@ const allClosed = async (req, res) => {
       recordId: null,
       title: '',
       applicationGroup: null,
-      applicationGroupName: null,
+      applicationGroupName: recordResult[i].applicationGroupName,
       createdBy: null,
       createdByName: recordResult[i].createdByName,
       createAt: '',
       commentCount: 0,
       isUnConfirmed: true,
-      thumbNailItemId: null,
+      thumbNailItemId: recordResult[i].thumbNailItemId,
       updatedAt: '',
     };
 
@@ -544,20 +552,8 @@ const allClosed = async (req, res) => {
     const createdBy = line.created_by;
     const applicationGroup = line.application_group;
     const updatedAt = line.updated_at;
-    let applicationGroupName = null;
-    let thumbNailItemId = null;
     let commentCount = 0;
     let isUnConfirmed = true;
-
-    const [groupResult] = await pool.query(searchGroupQs, [applicationGroup]);
-    if (groupResult.length === 1) {
-      applicationGroupName = groupResult[0].name;
-    }
-
-    const [itemResult] = await pool.query(searchThumbQs, [recordId]);
-    if (itemResult.length === 1) {
-      thumbNailItemId = itemResult[0].item_id;
-    }
 
     const [countResult] = await pool.query(countQs, [recordId]);
     if (countResult.length === 1) {
@@ -577,12 +573,10 @@ const allClosed = async (req, res) => {
     resObj.recordId = recordId;
     resObj.title = line.title;
     resObj.applicationGroup = applicationGroup;
-    resObj.applicationGroupName = applicationGroupName;
     resObj.createdBy = createdBy;
     resObj.createAt = line.created_at;
     resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
-    resObj.thumbNailItemId = thumbNailItemId;
     resObj.updatedAt = updatedAt;
 
     items[i] = resObj;
