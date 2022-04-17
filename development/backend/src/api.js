@@ -588,7 +588,6 @@ const mineActive = async (req, res) => {
   const searchGroupQs = 'SELECT * FROM group_info WHERE group_id = ?';
   const searchThumbQs =
     'SELECT * FROM record_item_file WHERE linked_record_id = ? order by item_id asc limit 1';
-  const countQs = 'SELECT count(*) FROM record_comment WHERE linked_record_id = ?';
   const searchLastQs = 'SELECT * FROM record_last_access WHERE user_id = ? and record_id = ?';
 
   for (let i = 0; i < recordResult.length; i++) {
@@ -600,7 +599,7 @@ const mineActive = async (req, res) => {
       createdBy: null,
       createdByName: null,
       createAt: '',
-      commentCount: 0,
+      commentCount: recordResult[i].comment_count,
       isUnConfirmed: true,
       thumbNailItemId: null,
       updatedAt: '',
@@ -615,7 +614,6 @@ const mineActive = async (req, res) => {
     let createdByName = null;
     let applicationGroupName = null;
     let thumbNailItemId = null;
-    let commentCount = 0;
     let isUnConfirmed = true;
 
     const [userResult] = await pool.query(searchUserQs, [createdBy]);
@@ -631,11 +629,6 @@ const mineActive = async (req, res) => {
     const [itemResult] = await pool.query(searchThumbQs, [recordId]);
     if (itemResult.length === 1) {
       thumbNailItemId = itemResult[0].item_id;
-    }
-
-    const [countResult] = await pool.query(countQs, [recordId]);
-    if (countResult.length === 1) {
-      commentCount = countResult[0]['count(*)'];
     }
 
     const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
@@ -655,7 +648,6 @@ const mineActive = async (req, res) => {
     resObj.createdBy = createdBy;
     resObj.createdByName = createdByName;
     resObj.createAt = line.created_at;
-    resObj.commentCount = commentCount;
     resObj.isUnConfirmed = isUnConfirmed;
     resObj.thumbNailItemId = thumbNailItemId;
     resObj.updatedAt = updatedAt;
