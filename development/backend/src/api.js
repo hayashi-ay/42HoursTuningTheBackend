@@ -506,7 +506,8 @@ const allClosed = async (req, res) => {
   const getRecordsQs = `SELECT r.*,
     u.name as createdByName,
     gi.name as applicationGroupName,
-    rf.item_id as thumbNailItemId
+    rf.item_id as thumbNailItemId,
+    la.access_time as access_time
     FROM record r
     LEFT JOIN user u
     ON r.created_by = u.user_id
@@ -516,6 +517,8 @@ const allClosed = async (req, res) => {
       SELECT linked_record_id, item_id FROM record_item_file WHERE linked_record_id in (?) order by item_id asc limit 1
     ) AS rf
     ON r.record_id = rf.linked_record_id
+    LEFT JOIN record_last_access la
+    ON r.record_id = la.record_id AND r.created_by = la.user_id
     WHERE r.record_id in (?)`;
 
   const [recordIdResult] = await pool.query(searchRecordQs, [limit, offset]);
@@ -560,11 +563,10 @@ const allClosed = async (req, res) => {
       commentCount = countResult[0]['count(*)'];
     }
 
-    const [lastResult] = await pool.query(searchLastQs, [user.user_id, recordId]);
-    if (lastResult.length === 1) {
+    if (recordResult[i].access_time) {
       mylog(updatedAt);
       const updatedAtNum = Date.parse(updatedAt);
-      const accessTimeNum = Date.parse(lastResult[0].access_time);
+      const accessTimeNum = Date.parse(recordResult[i].access_time);
       if (updatedAtNum <= accessTimeNum) {
         isUnConfirmed = false;
       }
