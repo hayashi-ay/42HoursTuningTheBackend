@@ -681,7 +681,12 @@ const getComments = async (req, res) => {
 
   const recordId = req.params.recordId;
 
-  const commentQs = `SELECT * FROM record_comment WHERE linked_record_id = ? order by created_at desc`;
+  const commentQs = `SELECT r.*,
+    u.name as userName
+    FROM record_comment r
+    LEFT JOIN user u
+    ON r.created_by = u.user_id
+    WHERE linked_record_id = ? order by created_at desc`;
 
   const [commentResult] = await pool.query(commentQs, [`${recordId}`]);
   mylog(commentResult);
@@ -689,14 +694,13 @@ const getComments = async (req, res) => {
   const commentList = Array(commentResult.length);
 
   const searchPrimaryGroupQs = `SELECT * FROM group_member WHERE user_id = ? and is_primary = true`;
-  const searchUserQs = `SELECT * FROM user WHERE user_id = ?`;
   const searchGroupQs = `SELECT * FROM group_info WHERE group_id = ?`;
   for (let i = 0; i < commentResult.length; i++) {
     let commentInfo = {
       commentId: '',
       value: '',
       createdBy: null,
-      createdByName: null,
+      createdByName: commentResult[i].userName,
       createdByPrimaryGroupName: null,
       createdAt: null,
     };
@@ -710,11 +714,6 @@ const getComments = async (req, res) => {
       if (groupResult.length === 1) {
         commentInfo.createdByPrimaryGroupName = groupResult[0].name;
       }
-    }
-
-    const [userResult] = await pool.query(searchUserQs, [line.created_by]);
-    if (userResult.length === 1) {
-      commentInfo.createdByName = userResult[0].name;
     }
 
     commentInfo.commentId = line.comment_id;
